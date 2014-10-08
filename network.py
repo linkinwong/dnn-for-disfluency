@@ -9,6 +9,22 @@ import theano.tensor.nnet as nnet
 import math
 
 
+class EmbeddingLayer(object):
+    def __init__(self, input, input_size, output_size):
+        We_val = np.asarray(np.random.uniform(
+            low=-np.sqrt(6.0 / (input_size + output_size * 2)),
+            high=np.sqrt(6.0 / (input_size + output_size * 2)),
+            size=(input_size, output_size)), dtype=theano.config.floatX)
+
+        self.We = theano.shared(We_val, 'We', borrow=True)
+
+        be_val = np.zeros((output_size,), dtype=theano.config.floatX)
+        self.be = theano.shared(value=be_val, name='be', borrow=True)
+
+        self.output = T.tanh(T.dot(input, self.We) + self.be)
+        self.param = [self.We, self.be]
+
+
 class EncoderLayer(object):
     def __init__(self, input, input_size, rnn_inner_size):
         W_val = np.asarray(np.random.uniform(
@@ -96,14 +112,16 @@ class FinalLayer(object):
 
 
 class Network(object):
-    def __init__(self, input, insize, outsize=4):
+    def __init__(self, input, insize, outsize=1):
+        embedding_size = 100
         recurrent_layer_size = 300
-        self.encoderLayer = EncoderLayer(input, insize, recurrent_layer_size)
+        self.embeddingLayer = EmbeddingLayer(input, insize, embedding_size)
+        self.encoderLayer = EncoderLayer(self.embeddingLayer.output, embedding_size, recurrent_layer_size)
 
         self.finalLayer = FinalLayer(self.encoderLayer.output, recurrent_layer_size)
 
         self.output = self.finalLayer.output
-        self.param = self.encoderLayer.param + self.finalLayer.param
+        self.param = self.embeddingLayer.param + self.encoderLayer.param + self.finalLayer.param
 
         self.R2 = 0
         for p in self.param:
@@ -142,9 +160,14 @@ def test_network(test_model, train_set, train_l, test_set, test_l, log):
     index = 0
     for s, lb in zip(test_set, test_l):
         net_out = test_model(s)
-        guess = np.argmax(net_out)
 
-        if guess == np.argmax(lb):
+        if net_out >= 0:
+            guess = 1
+
+        else:
+            guess = -1
+
+        if guess == lb:
             correct += 1
 
         else:
@@ -173,7 +196,7 @@ def run_network(train_set, train_l, test_set, test_l, expname=''):
 
     network = Network(sample, train_set[0].shape[1])
 
-    cost = T.sum((network.output - l) ** 2) + R2_coeff * network.R2
+    cost = (network.output - l) ** 2 + R2_coeff * network.R2
 
     test_model = theano.function(inputs=[sample], outputs=network.output, allow_input_downcast=True)
 
