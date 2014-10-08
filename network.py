@@ -140,16 +140,21 @@ def update_learning_rate(new_rate, network, gradient_param_list, sample, l, cost
                            updates=updates, allow_input_downcast=True)
 
 
-def test_network(test_model, train_set, train_l, test_set, test_l, log):
+def test_network(test_model, train_set, test_set, log):
     # test model
     print u'Testing model'
     correct = 0
-    for s, lb in zip(train_set, train_l):
+    for s in train_set:
         # s = np.reshape(s, (1,) + s.shape)
-        net_out = test_model(s)
-        guess = np.argmax(net_out)
+        net_out = test_model(s.array)
 
-        if guess == np.argmax(lb):
+        if net_out >= 0:
+            guess = 1
+
+        else:
+            guess = -1
+
+        if guess == s.label:
             correct += 1
 
     print u'Train set accuracy: %f' % (float(correct) / len(train_set))
@@ -158,8 +163,8 @@ def test_network(test_model, train_set, train_l, test_set, test_l, log):
     correct = 0
     mistakes = dict()
     index = 0
-    for s, lb in zip(test_set, test_l):
-        net_out = test_model(s)
+    for s in test_set:
+        net_out = test_model(s.array)
 
         if net_out >= 0:
             guess = 1
@@ -167,11 +172,11 @@ def test_network(test_model, train_set, train_l, test_set, test_l, log):
         else:
             guess = -1
 
-        if guess == lb:
+        if guess == s.label:
             correct += 1
 
         else:
-            mistakes[index] = (net_out, lb)
+            mistakes[index] = (net_out, s.label)
         index += 1
 
     print mistakes
@@ -179,7 +184,7 @@ def test_network(test_model, train_set, train_l, test_set, test_l, log):
     log.write(u'Test set accuracy: %f\n' % (float(correct) / len(test_set)))
 
 
-def run_network(train_set, train_l, test_set, test_l, expname=''):
+def run_network(train_set, test_set, expname=''):
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
@@ -227,8 +232,8 @@ def run_network(train_set, train_l, test_set, test_l, expname=''):
         iter_cost = 0
 
         sn = 0
-        for s, lb in zip(train_set, train_l):
-            iter_cost += train_model(s, lb)
+        for s in train_set:
+            iter_cost += train_model(s.array, s.label)
 
             print sn
             sn += 1
@@ -240,7 +245,7 @@ def run_network(train_set, train_l, test_set, test_l, expname=''):
         log.write(u'Epoch %d: cost %f\n' % (i, iter_cost))
         i += 1
 
-        test_network(test_model, train_set, train_l, test_set, test_l, log)  # Test after every epoch
+        test_network(test_model, train_set, test_set, log)  # Test after every epoch
         plotobj.update(1)
 
         if last_error < iter_cost:
