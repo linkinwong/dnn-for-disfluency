@@ -120,7 +120,7 @@ class Network(object):
 
         self.finalLayer = FinalLayer(self.encoderLayer.output, recurrent_layer_size)
 
-        self.output = self.finalLayer.output
+        self.output = self.finalLayer.output[0]
         self.param = self.embeddingLayer.param + self.encoderLayer.param + self.finalLayer.param
 
         self.R2 = 0
@@ -146,7 +146,7 @@ def test_network(test_model, train_set, test_set, log):
     correct = 0
     for s in train_set:
         # s = np.reshape(s, (1,) + s.shape)
-        net_out = test_model(s.array)
+        net_out = test_model(s.getArray())
 
         if net_out >= 0:
             guess = 1
@@ -164,7 +164,7 @@ def test_network(test_model, train_set, test_set, log):
     mistakes = dict()
     index = 0
     for s in test_set:
-        net_out = test_model(s.array)
+        net_out = test_model(s.getArray())
 
         if net_out >= 0:
             guess = 1
@@ -175,8 +175,7 @@ def test_network(test_model, train_set, test_set, log):
         if guess == s.label:
             correct += 1
 
-        else:
-            mistakes[index] = (net_out, s.label)
+        mistakes[index] = (net_out, s.label)
         index += 1
 
     print mistakes
@@ -197,9 +196,9 @@ def run_network(train_set, test_set, expname=''):
 
     # Symbolic variables
     sample = T.matrix(u'sample')
-    l = T.vector(u'l')
+    l = T.scalar(u'l')
 
-    network = Network(sample, train_set[0].shape[1])
+    network = Network(sample, train_set[0].getArray().shape[1])
 
     cost = (network.output - l) ** 2 + R2_coeff * network.R2
 
@@ -233,7 +232,7 @@ def run_network(train_set, test_set, expname=''):
 
         sn = 0
         for s in train_set:
-            iter_cost += train_model(s.array, s.label)
+            iter_cost += train_model(s.getArray(), s.label)
 
             print sn
             sn += 1

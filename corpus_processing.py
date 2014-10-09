@@ -1,12 +1,16 @@
 __author__ = 'brtdra'
 
 import numpy as np
+import scipy.sparse as sp
 
 
 class Sentence(object):
     def __init__(self, array, label):
-        self.array = array
+        self.array = sp.lil_matrix(array)
         self.label = label
+
+    def getArray(self):
+        return self.array.todense()
 
 
 def find_all_words(all_lines):
@@ -39,20 +43,21 @@ def corpus_processing(train_fname, test_fname, train_lb_fname, test_lb_fname):
         a = np.zeros((len(line_toks), len(word_list) + 1))
 
         for i in np.arange(len(line_toks)):
-            ix = word_list.index(line_toks[i])
+            try:
+                ix = word_list.index(line_toks[i]) + 1
 
-            if ix == -1:
+            except ValueError:
                 ix = 0
-
-            else:
-                ix += 1
 
             a[i, ix] = 1
 
-        if label == 0:
-            label = -1
+        if label.strip() == '0':
+            lb = -1
 
-        train_corpus.append(Sentence(a, label))
+        else:
+            lb = 1
+
+        train_corpus.append(Sentence(a, lb))
         print 'Processed sentence ' + str(j)
         j += 1
 
@@ -77,10 +82,13 @@ def corpus_processing(train_fname, test_fname, train_lb_fname, test_lb_fname):
 
             a[i, ix] = 1
 
-        if label == 0:
-            label = -1
+        if label.strip() == '0':
+            lb = -1
 
-        test_corpus.append(Sentence(a, label))
+        else:
+            lb = 1
+
+        test_corpus.append(Sentence(a, lb))
         print 'Processed sentence ' + str(j)
         j += 1
 
