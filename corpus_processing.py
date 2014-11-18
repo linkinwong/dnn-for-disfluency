@@ -1,27 +1,33 @@
 __author__ = 'brtdra'
 
 import numpy as np
+import scipy.sparse as sp
 
 
-class Sentence(object):
-    def __init__(self, array, label):
-        self.array = array
+class Word(object):
+    def __init__(self, word, pos, label):
+        self.word = sp.lil_matrix(word)
+        self.pos = sp.lil_matrix(pos)
         self.label = label
 
 
 def find_all_words(all_lines):
-    ret = dict()
+    all_words = set()
+    all_pos = set()
+    all_labels = set()
 
     for l in all_lines:
-        words = l.split(' ')
+        if len(l.strip()) > 0:
+            fields = l.split(' ')
 
-        for w in words:
-            ret[w] = 1
+            all_words.add(fields[0])
+            all_pos.add(fields[1])
+            all_labels.add(fields[2])
 
-    return sorted(list(ret.keys()))
+    return sorted(list(all_words)), sorted(list(all_pos)), sorted(list(all_labels))
 
 
-def corpus_processing(train_fname, test_fname, train_lb_fname, test_lb_fname):
+def corpus_processing(train_fname, test_fname):
     trainf = open(train_fname)
     train_lines = trainf.readlines()
     trainf.close()
@@ -30,61 +36,77 @@ def corpus_processing(train_fname, test_fname, train_lb_fname, test_lb_fname):
 
     train_corpus = []
 
-    trainlbf = open(train_lb_fname)
-
     j = 0
 
-    for line, label in zip(train_lines, trainlbf):
-        line_toks = line.split(' ')
-        a = np.zeros((len(line_toks), len(word_list) + 1))
+    sentence = []
+    for line in train_lines:
+        if len(line.strip()) > 0:
+            line_fields = line.split(' ')
+            word_array = np.zeros(len(word_list[0]) + 1)
+            pos_array = np.zeros(len(word_list[1]) + 1)
 
-        for i in np.arange(len(line_toks)):
-            ix = word_list.index(line_toks[i])
-
-            if ix == -1:
-                ix = 0
+            if line_fields[0] in word_list[0]:
+                ix = word_list[0].index(line_fields[0])
+                word_array[ix] = 1
 
             else:
-                ix += 1
+                word_array[-1] = 1
 
-            a[i, ix] = 1
+            if line_fields[1] in word_list[1]:
+                ix = word_list[1].index(line_fields[1])
+                pos_array[ix] = 1
 
-        if label == 0:
-            label = -1
+            else:
+                pos_array[-1] = 1
 
-        train_corpus.append(Sentence(a, label))
-        print 'Processed sentence ' + str(j)
-        j += 1
+            lbl = -1 if word_list[2] == 'O' else 1
 
-    trainlbf.close()
+            sentence.append(Word(word_array, pos_array, lbl))
+
+        else:
+            train_corpus.append(sentence)
+            sentence = []
+
+            print 'Processed train sentence ' + str(j)
+            j += 1
 
     testf = open(test_fname)
-    testlbf = open(test_lb_fname)
-
     test_corpus = []
+
     j = 0
 
-    for line, label in zip(testf, testlbf):
-        line_toks = line.split(' ')
-        a = np.zeros((len(line_toks), len(word_list) + 1))
+    sentence = []
+    for line in testf:
+        if len(line.strip()) > 0:
+            line_fields = line.split(' ')
+            word_array = np.zeros(len(word_list[0]) + 1)
+            pos_array = np.zeros(len(word_list[1]) + 1)
 
-        for i in np.arange(len(line_toks)):
-            try:
-                ix = word_list.index(line_toks[i]) + 1
+            if line_fields[0] in word_list[0]:
+                ix = word_list[0].index(line_fields[0])
+                word_array[ix] = 1
 
-            except ValueError:
-                ix = 0
+            else:
+                word_array[-1] = 1
 
-            a[i, ix] = 1
+            if line_fields[1] in word_list[1]:
+                ix = word_list[1].index(line_fields[1])
+                pos_array[ix] = 1
 
-        if label == 0:
-            label = -1
+            else:
+                pos_array[-1] = 1
 
-        test_corpus.append(Sentence(a, label))
-        print 'Processed sentence ' + str(j)
-        j += 1
+            lbl = -1 if word_list[2] == 'O' else 1
+
+            sentence.append(Word(word_array, pos_array, lbl))
+
+        else:
+            test_corpus.append(sentence)
+            sentence = []
+
+            print 'Processed test sentence ' + str(j)
+            j += 1
 
     testf.close()
-    testlbf.close()
 
     return train_corpus, test_corpus
