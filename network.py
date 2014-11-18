@@ -96,6 +96,49 @@ class EncoderLayer(object):
                       self.buw, self.bz, self.br]
 
 
+class DecoderBlock(object):
+    def __init__(self, input, recurrent_layer_size, sentence_length):
+        c = input
+        input_size = recurrent_layer_size * 2 + 1  # h_t-1, y_t-1, c
+        output_size = 1
+
+        Woutput_val = np.asarray(np.random.uniform(
+            low=-np.sqrt(6.0 / (input_size + output_size)),
+            high=np.sqrt(6.0 / (input_size + output_size)),
+            size=(input_size, output_size)), dtype=theano.config.floatX)
+
+        self.Woutput = theano.shared(Woutput_val, 'Woutput', borrow=True)
+
+        boutput_val = np.zeros((output_size,), dtype=theano.config.floatX)
+        self.boutput = theano.shared(value=boutput_val, name='boutput', borrow=True)
+
+        Witer_val = np.asarray(np.random.uniform(
+            low=-np.sqrt(6.0 / (input_size + recurrent_layer_size)),
+            high=np.sqrt(6.0 / (input_size + recurrent_layer_size)),
+            size=(input_size, recurrent_layer_size)), dtype=theano.config.floatX)
+
+        self.Witer = theano.shared(Witer_val, 'Witer', borrow=True)
+
+        biter_val = np.zeros((recurrent_layer_size,), dtype=theano.config.floatX)
+        self.biter = theano.shared(value=biter_val, name='biter', borrow=True)
+
+        def scan_function(input, intermediate_results, Woutput, boutput, Witer, biter):
+            total_input = T.concatenate((input, intermediate_results[0], intermediate_results[1]))
+            h_t1 = T.tanh(T.dot(total_input, Witer) + biter)
+            y_t1 = T.tanh(T.dot(total_input, Woutput) + boutput)
+
+            return [h_t1, y_t1]
+
+        outputs_info = [T.as_tensor_variable(np.asarray(np.zeros(recurrent_layer_size), dtype=theano.config.floatX)),
+                        T.as_tensor_variable(np.asarray(np.zeros(1), dtype=theano.config.floatX))]
+        final_inter_output, updates = theano.scan(scan_function, outputs_info=outputs_info,
+                                                  sequences=[input] * sentence_length,
+                                                  non_sequences=[self.Woutput, self.boutput, self.Witer, self.biter])
+
+        self.output = final_inter_output[1]
+        self.param = [self.Woutput, self.boutput, self.Witer, self.biter]
+
+
 class FinalLayer(object):
     def __init__(self, input, insize, outsize=4):
         Wf_val = np.asarray(np.random.uniform(
