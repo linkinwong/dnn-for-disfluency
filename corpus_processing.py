@@ -11,6 +11,19 @@ class Word(object):
         self.label = label
 
 
+class Sentence(object):
+    def __init__(self, word_list):
+        self.words = word_list
+
+    def getLabelsArray(self):
+        ret = np.zeros(len(self.words))
+
+        for i in range(len(self.words)):
+            ret[i] = self.words[i].label
+
+        return ret
+
+
 def find_all_words(all_lines):
     all_words = set()
     all_pos = set()
@@ -64,7 +77,7 @@ def corpus_processing(train_fname, test_fname):
             sentence.append(Word(word_array, pos_array, lbl))
 
         else:
-            train_corpus.append(sentence)
+            train_corpus.append(Sentence(sentence))
             sentence = []
 
             print 'Processed train sentence ' + str(j)
@@ -101,7 +114,7 @@ def corpus_processing(train_fname, test_fname):
             sentence.append(Word(word_array, pos_array, lbl))
 
         else:
-            test_corpus.append(sentence)
+            test_corpus.append(Sentence(sentence))
             sentence = []
 
             print 'Processed test sentence ' + str(j)

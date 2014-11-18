@@ -92,6 +92,7 @@ class EncoderLayer(object):
                                                                  self.buw, self.bz, self.br])
 
         self.output = final_inter_output[-1]
+        self.sentenceLength = T.shape(final_inter_output)[0]
         self.param = [self.W, self.U, self.Wz, self.Uz, self.Wr, self.Ur,
                       self.buw, self.bz, self.br]
 
@@ -139,31 +140,17 @@ class DecoderBlock(object):
         self.param = [self.Woutput, self.boutput, self.Witer, self.biter]
 
 
-class FinalLayer(object):
-    def __init__(self, input, insize, outsize=4):
-        Wf_val = np.asarray(np.random.uniform(
-            low=-np.sqrt(6.0 / (insize + outsize)),
-            high=np.sqrt(6.0 / (insize + outsize)),
-            size=(insize, outsize)), dtype=theano.config.floatX)
-        self.Wf = theano.shared(Wf_val, 'Wf', borrow=True)
-
-        bf_val = np.zeros((outsize,), theano.config.floatX)
-        self.bf = theano.shared(bf_val, 'bf', borrow=True)
-
-        self.output = T.tanh(T.dot(input, self.Wf) + self.bf)
-        self.param = [self.Wf, self.bf]
-
-
 class Network(object):
-    def __init__(self, input, insize, outsize=1):
+    def __init__(self, input, insize):
         embedding_size = 100
         recurrent_layer_size = 300
         self.embeddingLayer = EmbeddingLayer(input, insize, embedding_size)
         self.encoderLayer = EncoderLayer(self.embeddingLayer.output, embedding_size, recurrent_layer_size)
 
-        self.finalLayer = FinalLayer(self.encoderLayer.output, recurrent_layer_size)
+        self.decoderBlock = DecoderBlock(self.encoderLayer.output, recurrent_layer_size,
+                                         self.encoderLayer.sentenceLength)
 
-        self.output = self.finalLayer.output
+        self.output = self.decoderBlock.output
         self.param = self.embeddingLayer.param + self.encoderLayer.param + self.finalLayer.param
 
         self.R2 = 0
