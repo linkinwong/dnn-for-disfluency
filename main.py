@@ -2,13 +2,12 @@ __author__ = 'brtdra'
 
 from network import *
 
-import pickle
-import liblinearutil as ll
+from corpus_processing import *
 
 
 def main():
-    print "Hello world!"
-
+    train_set, test_set = corpus_processing('ssr.tr.sents', 'ssr.te.sents', 'ssr.tr.annotated.bin',
+                                            'ssr.te.annotated.bin')
 
 if __name__ == '__main__':
     main()
