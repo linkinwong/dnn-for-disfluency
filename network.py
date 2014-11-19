@@ -205,8 +205,8 @@ def run_network(train_set, test_set, expname):
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
-    learning_rate = 0.001
-    R2_coeff = 5e-4
+    learning_rate = 0.01
+    R2_coeff = 0
     log.write('Learning rate: %f\n' % learning_rate)
     log.write('R2coeff: %f\n' % R2_coeff)
 
@@ -240,7 +240,7 @@ def run_network(train_set, test_set, expname):
     # Training
     print u'Training...'
 
-    epochs = 2
+    epochs = 10
 
     # Epochs
     last_error = 0
@@ -255,7 +255,9 @@ def run_network(train_set, test_set, expname):
 
             iter_cost += train_model(s.getInputArray(), s.getLabelsArray())
 
-            print sn
+            if sn % 1000 == 0:
+                print 'Epoch %d: processed %d sentences' % (i, sn)
+
             sn += 1
 
             if math.isnan(iter_cost):

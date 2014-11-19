@@ -83,7 +83,7 @@ def corpus_processing(train_fname, test_fname):
             else:
                 pos_array[-1] = 1
 
-            lbl = -1 if word_list[2] == 'O' else 1
+            lbl = -1 if line_fields[2].strip() == 'O' else 1
 
             sentence.append(Word(word_array, pos_array, lbl))
 
@@ -94,8 +94,6 @@ def corpus_processing(train_fname, test_fname):
             print 'Processed train sentence ' + str(j)
             j += 1
 
-            if j > 10:
-                break
 
     testf = open(test_fname)
     test_corpus = []
@@ -123,7 +121,7 @@ def corpus_processing(train_fname, test_fname):
             else:
                 pos_array[-1] = 1
 
-            lbl = -1 if word_list[2] == 'O' else 1
+            lbl = -1 if line_fields[2].strip() == 'O' else 1
 
             sentence.append(Word(word_array, pos_array, lbl))
 
@@ -134,8 +132,6 @@ def corpus_processing(train_fname, test_fname):
             print 'Processed test sentence ' + str(j)
             j += 1
 
-            if j > 10:
-                break
 
     testf.close()
 
