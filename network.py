@@ -7,6 +7,7 @@ import theano.tensor as T
 import theano
 import theano.tensor.nnet as nnet
 import math
+import random
 
 
 class EmbeddingLayer(object):
@@ -92,36 +93,71 @@ class EncoderLayer(object):
                                                                  self.buw, self.bz, self.br])
 
         self.output = final_inter_output[-1]
+        self.sentenceLength = T.shape(final_inter_output)[0]
         self.param = [self.W, self.U, self.Wz, self.Uz, self.Wr, self.Ur,
                       self.buw, self.bz, self.br]
 
 
-class FinalLayer(object):
-    def __init__(self, input, insize, outsize=4):
-        Wf_val = np.asarray(np.random.uniform(
-            low=-np.sqrt(6.0 / (insize + outsize)),
-            high=np.sqrt(6.0 / (insize + outsize)),
-            size=(insize, outsize)), dtype=theano.config.floatX)
-        self.Wf = theano.shared(Wf_val, 'Wf', borrow=True)
+class DecoderBlock(object):
+    def __init__(self, input, recurrent_layer_size, sentence_length):
+        c = input
+        input_size = recurrent_layer_size * 2 + 1  # h_t-1, y_t-1, c
+        output_size = 1
 
-        bf_val = np.zeros((outsize,), theano.config.floatX)
-        self.bf = theano.shared(bf_val, 'bf', borrow=True)
+        Woutput_val = np.asarray(np.random.uniform(
+            low=-np.sqrt(6.0 / (input_size + output_size)),
+            high=np.sqrt(6.0 / (input_size + output_size)),
+            size=(input_size, output_size)), dtype=theano.config.floatX)
 
-        self.output = T.tanh(T.dot(input, self.Wf) + self.bf)
-        self.param = [self.Wf, self.bf]
+        self.Woutput = theano.shared(Woutput_val, 'Woutput', borrow=True)
+
+        boutput_val = np.zeros((output_size,), dtype=theano.config.floatX)
+        self.boutput = theano.shared(value=boutput_val, name='boutput', borrow=True)
+
+        Witer_val = np.asarray(np.random.uniform(
+            low=-np.sqrt(6.0 / (input_size + recurrent_layer_size)),
+            high=np.sqrt(6.0 / (input_size + recurrent_layer_size)),
+            size=(input_size, recurrent_layer_size)), dtype=theano.config.floatX)
+
+        self.Witer = theano.shared(Witer_val, 'Witer', borrow=True)
+
+        biter_val = np.zeros((recurrent_layer_size,), dtype=theano.config.floatX)
+        self.biter = theano.shared(value=biter_val, name='biter', borrow=True)
+
+        def scan_function(h_t, y_t, c, Woutput, boutput, Witer, biter):
+            total_input = T.concatenate((c, h_t, y_t.reshape((1,))))
+            h_t1 = T.tanh(T.dot(total_input, Witer) + biter)
+            y_t1 = T.tanh(T.dot(total_input, Woutput) + boutput)[0]
+
+            return [h_t1, y_t1]
+
+        outputs_info = [T.as_tensor_variable(np.asarray(np.zeros(recurrent_layer_size), dtype=theano.config.floatX),
+                                             name='ht', ndim=1),
+                        T.as_tensor_variable(np.asarray(0.0, dtype=theano.config.floatX))]
+        final_inter_output, updates = theano.scan(scan_function, outputs_info=outputs_info,
+                                                  non_sequences=[input, self.Woutput, self.boutput, self.Witer,
+                                                                 self.biter],
+                                                  n_steps=sentence_length)
+
+        # final_inter_output[0] = final_inter_output[0].flatten()
+        # final_inter_output[1] = final_inter_output[1].flatten()
+
+        self.output = final_inter_output[1]
+        self.param = [self.Woutput, self.boutput, self.Witer, self.biter]
 
 
 class Network(object):
-    def __init__(self, input, insize, outsize=1):
+    def __init__(self, input, insize):
         embedding_size = 100
         recurrent_layer_size = 300
         self.embeddingLayer = EmbeddingLayer(input, insize, embedding_size)
         self.encoderLayer = EncoderLayer(self.embeddingLayer.output, embedding_size, recurrent_layer_size)
 
-        self.finalLayer = FinalLayer(self.encoderLayer.output, recurrent_layer_size)
+        self.decoderBlock = DecoderBlock(self.encoderLayer.output, recurrent_layer_size,
+                                         self.encoderLayer.sentenceLength)
 
-        self.output = self.finalLayer.output[0]
-        self.param = self.embeddingLayer.param + self.encoderLayer.param + self.finalLayer.param
+        self.output = self.decoderBlock.output
+        self.param = self.embeddingLayer.param + self.encoderLayer.param + self.decoderBlock.param
 
         self.R2 = 0
         for p in self.param:
@@ -135,60 +171,81 @@ def update_learning_rate(new_rate, network, gradient_param_list, sample, l, cost
 
     print 'Updated learning rate: %f' % new_rate
 
-    return theano.function(inputs=[sample, l],
-                           outputs=cost,
-                           updates=updates, allow_input_downcast=True)
+    return theano.function(inputs=[sample, l], outputs=cost, updates=updates, allow_input_downcast=True)
 
 
 def test_network(test_model, train_set, test_set, log):
     # test model
     print u'Testing model'
-    correct = 0
-    for s in train_set:
-        # s = np.reshape(s, (1,) + s.shape)
-        net_out = test_model(s.getArray())
 
-        if net_out >= 0:
-            guess = 1
-
-        else:
-            guess = -1
-
-        if guess == s.label:
-            correct += 1
-
-    print u'Train set accuracy: %f' % (float(correct) / len(train_set))
-    log.write(u'Train set accuracy: %f\n' % (float(correct) / len(train_set)))
+    tpw = 0
+    fpw = 0
+    tnw = 0
+    fnw = 0
 
     correct = 0
     mistakes = dict()
     index = 0
     for s in test_set:
-        net_out = test_model(s.getArray())
+        net_out = test_model(s.getInputArray())
+        golden_label = s.getLabelsArray()
 
-        if net_out >= 0:
-            guess = 1
+        net_out[net_out >= 0.0] = 1
+        net_out[net_out < 0.0] = -1
 
-        else:
-            guess = -1
+        for w in np.arange(len(net_out)):
+            if w == 0 or w == len(net_out) - 1:  # Sentence boundaries (false words)
+                continue
 
-        if guess == s.label:
+            if net_out[w] == 1 and golden_label[w] == 1:
+                tpw += 1
+
+            elif net_out[w] == -1 and golden_label[w] == -1:
+                tnw += 1
+
+            elif net_out[w] == 1 and golden_label[w] == -1:
+                fpw += 1
+
+            else:
+                fnw += 1
+
+        if np.sum(net_out == golden_label) == len(net_out):
             correct += 1
 
-        mistakes[index] = (net_out, s.label)
+        else:
+            mistakes[index] = (net_out, golden_label)
         index += 1
 
-    print mistakes
-    print u'Test set accuracy: %f' % (float(correct) / len(test_set))
-    log.write(u'Test set accuracy: %f\n' % (float(correct) / len(test_set)))
+    word_accuracy = float(tpw + tnw) / float(tpw + tnw + fpw + fnw)
+    word_precision = float(tpw) / float(tpw + fpw)
+    word_recall = float(tpw) / float(tpw + fnw)
+    word_fscore = 2 * word_precision * word_recall / (word_precision + word_recall)
+    sentence_accuracy = float(correct) / len(test_set)
+
+    for m in sorted(mistakes.keys())[:10]:
+        print mistakes[m]
+
+    print u'Word accuracy: %f' % word_accuracy
+    print u'Word precision: %f' % word_precision
+    print u'Word recall: %f' % word_recall
+    print u'Word F-1: %f' % word_fscore
+    print u'Sentence accuracy: %f' % sentence_accuracy
+
+    log.write(u'Word accuracy: %f\n' % word_accuracy)
+    log.write(u'Word precision: %f\n' % word_precision)
+    log.write(u'Word recall: %f\n' % word_recall)
+    log.write(u'Word F-1: %f\n' % word_fscore)
+    log.write(u'Sentence accuracy: %f\n' % sentence_accuracy)
+
+    return word_fscore, sentence_accuracy
 
 
-def run_network(train_set, test_set, expname=''):
+def run_network(train_set, test_set, expname):
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
     learning_rate = 0.001
-    R2_coeff = 5e-4
+    R2_coeff = 0
     log.write('Learning rate: %f\n' % learning_rate)
     log.write('R2coeff: %f\n' % R2_coeff)
 
@@ -196,13 +253,15 @@ def run_network(train_set, test_set, expname=''):
 
     # Symbolic variables
     sample = T.matrix(u'sample')
-    l = T.scalar(u'l')
+    l = T.vector(u'l')
 
-    network = Network(sample, train_set[0].getArray().shape[1])
+    network = Network(sample, train_set[0].getTotalInputLength())
 
-    cost = (network.output - l) ** 2 + R2_coeff * network.R2
+    cost = T.sum((network.output - l) ** 2)
 
     test_model = theano.function(inputs=[sample], outputs=network.output, allow_input_downcast=True)
+
+    test_network(test_model, train_set, test_set, log)
 
     # Gradients computations
     gradient_param_list = []
@@ -217,24 +276,33 @@ def run_network(train_set, test_set, expname=''):
                                   outputs=cost,
                                   updates=updates, allow_input_downcast=True)
 
+    # Validation set building
+    train_set_len = len(train_set)
+    random.shuffle(train_set)
+    validation_set = train_set[:train_set_len / 10]
+    reduced_train_set = train_set[train_set_len / 10:]
+
     # Training
     print u'Training...'
 
-    epochs = 100
+    epochs = 1000
 
     # Epochs
     last_error = 0
     iter_cost = 3e10
     i = 0
+    old_val_result = 0.0, 0.0
     while i < epochs:
         last_error = iter_cost
         iter_cost = 0
 
         sn = 0
-        for s in train_set:
-            iter_cost += train_model(s.getArray(), s.label)
+        for s in reduced_train_set:
+            iter_cost += train_model(s.getInputArray(), s.getLabelsArray())
 
-            print sn
+            if sn % 1000 == 0:
+                print 'Epoch %d: processed %d sentences' % (i, sn)
+
             sn += 1
 
             if math.isnan(iter_cost):
@@ -244,13 +312,22 @@ def run_network(train_set, test_set, expname=''):
         log.write(u'Epoch %d: cost %f\n' % (i, iter_cost))
         i += 1
 
-        test_network(test_model, train_set, test_set, log)  # Test after every epoch
+        val_result = test_network(test_model, train_set, validation_set, log)  # Test after every epoch
         plotobj.update(1)
 
         if last_error < iter_cost:
             learning_rate /= 2
             train_model = update_learning_rate(learning_rate, network, gradient_param_list, sample, l, cost)
 
+        # Exit condition
+        if last_error > iter_cost and old_val_result[0] > val_result[0] and old_val_result[1] > val_result[
+            1] and i > 20:
+            break
+
+        old_val_result = val_result
+
+    # Final test
+    test_network(test_model, train_set, test_set, log)
     log.close()
 
 
