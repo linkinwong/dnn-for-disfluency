@@ -322,7 +322,9 @@ def run_network(train_set, test_set, expname):
         # Exit condition
         if last_error > iter_cost and old_val_result[0] > val_result[0] and old_val_result[1] > val_result[
             1] and i > 20:
-            break
+            print 'TEST SET EVALUATION'
+            log.write('TEST SET EVALUATION')
+            test_network(test_model, train_set, test_set, log)
 
         old_val_result = val_result
 
