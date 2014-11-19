@@ -7,6 +7,7 @@ import theano.tensor as T
 import theano
 import theano.tensor.nnet as nnet
 import math
+import random
 
 
 class EmbeddingLayer(object):
@@ -194,7 +195,8 @@ def test_network(test_model, train_set, test_set, log):
             mistakes[index] = (net_out, golden_label)
         index += 1
 
-    print mistakes
+    for m in sorted(mistakes.keys())[:10]:
+        print mistakes[m]
     print u'Test set accuracy: %f' % (float(correct) / len(test_set))
     log.write(u'Test set accuracy: %f\n' % (float(correct) / len(test_set)))
 
@@ -205,7 +207,7 @@ def run_network(train_set, test_set, expname):
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
-    learning_rate = 0.01
+    learning_rate = 0.001
     R2_coeff = 0
     log.write('Learning rate: %f\n' % learning_rate)
     log.write('R2coeff: %f\n' % R2_coeff)
@@ -237,6 +239,12 @@ def run_network(train_set, test_set, expname):
                                   outputs=cost,
                                   updates=updates, allow_input_downcast=True)
 
+    # Validation set building
+    train_set_len = len(train_set)
+    random.shuffle(train_set)
+    validation_set = train_set[:train_set_len / 10]
+    reduced_train_set = train_set[train_set_len / 10:]
+
     # Training
     print u'Training...'
 
@@ -251,8 +259,7 @@ def run_network(train_set, test_set, expname):
         iter_cost = 0
 
         sn = 0
-        for s in train_set:
-
+        for s in reduced_train_set:
             iter_cost += train_model(s.getInputArray(), s.getLabelsArray())
 
             if sn % 1000 == 0:
@@ -267,13 +274,16 @@ def run_network(train_set, test_set, expname):
         log.write(u'Epoch %d: cost %f\n' % (i, iter_cost))
         i += 1
 
-        test_network(test_model, train_set, test_set, log)  # Test after every epoch
+        test_network(test_model, train_set, validation_set, log)  # Test after every epoch
         plotobj.update(1)
 
         if last_error < iter_cost:
             learning_rate /= 2
             train_model = update_learning_rate(learning_rate, network, gradient_param_list, sample, l, cost)
 
+
+    # Final test
+    test_network(test_model, train_set, test_set, log)
     log.close()
 
 
