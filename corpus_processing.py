@@ -23,6 +23,17 @@ class Sentence(object):
 
         return ret
 
+    def getTotalInputLength(self):
+        return self.words[0].word.shape[1] + self.words[0].pos.shape[1]
+
+    def getInputArray(self):
+        ret = np.zeros((len(self.words), self.getTotalInputLength()))
+
+        for i in range(len(self.words)):
+            ret[i] = np.concatenate((self.words[i].word.todense(), self.words[i].pos.todense()), 1)
+
+        return ret
+
 
 def find_all_words(all_lines):
     all_words = set()
@@ -83,6 +94,9 @@ def corpus_processing(train_fname, test_fname):
             print 'Processed train sentence ' + str(j)
             j += 1
 
+            if j > 10:
+                break
+
     testf = open(test_fname)
     test_corpus = []
 
@@ -119,6 +133,9 @@ def corpus_processing(train_fname, test_fname):
 
             print 'Processed test sentence ' + str(j)
             j += 1
+
+            if j > 10:
+                break
 
     testf.close()
 

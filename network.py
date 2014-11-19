@@ -123,18 +123,23 @@ class DecoderBlock(object):
         biter_val = np.zeros((recurrent_layer_size,), dtype=theano.config.floatX)
         self.biter = theano.shared(value=biter_val, name='biter', borrow=True)
 
-        def scan_function(input, intermediate_results, Woutput, boutput, Witer, biter):
-            total_input = T.concatenate((input, intermediate_results[0], intermediate_results[1]))
+        def scan_function(h_t, y_t, c, Woutput, boutput, Witer, biter):
+            total_input = T.concatenate((c, h_t, y_t.reshape((1,))))
             h_t1 = T.tanh(T.dot(total_input, Witer) + biter)
-            y_t1 = T.tanh(T.dot(total_input, Woutput) + boutput)
+            y_t1 = T.tanh(T.dot(total_input, Woutput) + boutput)[0]
 
             return [h_t1, y_t1]
 
-        outputs_info = [T.as_tensor_variable(np.asarray(np.zeros(recurrent_layer_size), dtype=theano.config.floatX)),
-                        T.as_tensor_variable(np.asarray(np.zeros(1), dtype=theano.config.floatX))]
+        outputs_info = [T.as_tensor_variable(np.asarray(np.zeros(recurrent_layer_size), dtype=theano.config.floatX),
+                                             name='ht', ndim=1),
+                        T.as_tensor_variable(np.asarray(0.0, dtype=theano.config.floatX))]
         final_inter_output, updates = theano.scan(scan_function, outputs_info=outputs_info,
-                                                  sequences=[input] * sentence_length,
-                                                  non_sequences=[self.Woutput, self.boutput, self.Witer, self.biter])
+                                                  non_sequences=[input, self.Woutput, self.boutput, self.Witer,
+                                                                 self.biter],
+                                                  n_steps=sentence_length)
+
+        # final_inter_output[0] = final_inter_output[0].flatten()
+        # final_inter_output[1] = final_inter_output[1].flatten()
 
         self.output = final_inter_output[1]
         self.param = [self.Woutput, self.boutput, self.Witer, self.biter]
@@ -151,7 +156,7 @@ class Network(object):
                                          self.encoderLayer.sentenceLength)
 
         self.output = self.decoderBlock.output
-        self.param = self.embeddingLayer.param + self.encoderLayer.param + self.finalLayer.param
+        self.param = self.embeddingLayer.param + self.encoderLayer.param + self.decoderBlock.param
 
         self.R2 = 0
         for p in self.param:
@@ -165,48 +170,28 @@ def update_learning_rate(new_rate, network, gradient_param_list, sample, l, cost
 
     print 'Updated learning rate: %f' % new_rate
 
-    return theano.function(inputs=[sample, l],
-                           outputs=cost,
-                           updates=updates, allow_input_downcast=True)
+    return theano.function(inputs=[sample, l], outputs=cost, updates=updates, allow_input_downcast=True)
 
 
 def test_network(test_model, train_set, test_set, log):
     # test model
     print u'Testing model'
-    correct = 0
-    for s in train_set:
-        # s = np.reshape(s, (1,) + s.shape)
-        net_out = test_model(s.array)
-
-        if net_out >= 0:
-            guess = 1
-
-        else:
-            guess = -1
-
-        if guess == s.label:
-            correct += 1
-
-    print u'Train set accuracy: %f' % (float(correct) / len(train_set))
-    log.write(u'Train set accuracy: %f\n' % (float(correct) / len(train_set)))
 
     correct = 0
     mistakes = dict()
     index = 0
     for s in test_set:
-        net_out = test_model(s.array)
+        net_out = test_model(s.getInputArray())
+        golden_label = s.getLabelsArray()
 
-        if net_out >= 0:
-            guess = 1
+        net_out[net_out >= 0.0] = 1
+        net_out[net_out < 0.0] = -1
 
-        else:
-            guess = -1
-
-        if guess == s.label:
+        if np.sum(net_out == golden_label) == len(net_out):
             correct += 1
 
         else:
-            mistakes[index] = (net_out, s.label)
+            mistakes[index] = (net_out, golden_label)
         index += 1
 
     print mistakes
@@ -214,7 +199,9 @@ def test_network(test_model, train_set, test_set, log):
     log.write(u'Test set accuracy: %f\n' % (float(correct) / len(test_set)))
 
 
-def run_network(train_set, test_set, expname=''):
+def run_network(train_set, test_set, expname):
+    # theano.config.mode = 'DebugMode'
+
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
@@ -229,11 +216,13 @@ def run_network(train_set, test_set, expname=''):
     sample = T.matrix(u'sample')
     l = T.vector(u'l')
 
-    network = Network(sample, train_set[0].shape[1])
+    network = Network(sample, train_set[0].getTotalInputLength())
 
-    cost = (network.output - l) ** 2 + R2_coeff * network.R2
+    cost = T.sum((network.output - l) ** 2)
 
     test_model = theano.function(inputs=[sample], outputs=network.output, allow_input_downcast=True)
+
+    test_network(test_model, train_set, test_set, log)
 
     # Gradients computations
     gradient_param_list = []
@@ -251,7 +240,7 @@ def run_network(train_set, test_set, expname=''):
     # Training
     print u'Training...'
 
-    epochs = 100
+    epochs = 2
 
     # Epochs
     last_error = 0
@@ -263,7 +252,8 @@ def run_network(train_set, test_set, expname=''):
 
         sn = 0
         for s in train_set:
-            iter_cost += train_model(s.array, s.label)
+
+            iter_cost += train_model(s.getInputArray(), s.getLabelsArray())
 
             print sn
             sn += 1
