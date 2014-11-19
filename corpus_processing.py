@@ -40,6 +40,12 @@ def find_all_words(all_lines):
     all_pos = set()
     all_labels = set()
 
+    # Sentence boundaries
+    all_words.add('<s>')
+    all_pos.add('<s>')
+    all_words.add('</s>')
+    all_pos.add('</s>')
+
     for l in all_lines:
         if len(l.strip()) > 0:
             fields = l.split(' ')
@@ -52,6 +58,19 @@ def find_all_words(all_lines):
 
 
 def corpus_processing(train_fname, test_fname):
+    def start_new_sentence(word_list):
+        sentence = []
+        word_array = np.zeros(len(word_list[0]) + 1)
+        pos_array = np.zeros(len(word_list[1]) + 1)
+        wix = word_list[0].index('<s>')
+        pix = word_list[1].index('<s>')
+        word_array[wix] = 1
+        pos_array[pix] = 1
+        sentence.append(Word(word_array, pos_array, -1))
+
+        return sentence
+
+
     trainf = open(train_fname)
     train_lines = trainf.readlines()
     trainf.close()
@@ -62,7 +81,7 @@ def corpus_processing(train_fname, test_fname):
 
     j = 0
 
-    sentence = []
+    sentence = start_new_sentence(word_list)
     for line in train_lines:
         if len(line.strip()) > 0:
             line_fields = line.split(' ')
@@ -88,8 +107,16 @@ def corpus_processing(train_fname, test_fname):
             sentence.append(Word(word_array, pos_array, lbl))
 
         else:
+            word_array = np.zeros(len(word_list[0]) + 1)
+            pos_array = np.zeros(len(word_list[1]) + 1)
+            wix = word_list[0].index('</s>')
+            pix = word_list[1].index('</s>')
+            word_array[wix] = 1
+            pos_array[pix] = 1
+            sentence.append(Word(word_array, pos_array, -1))
             train_corpus.append(Sentence(sentence))
-            sentence = []
+            sentence = start_new_sentence(word_list)
+
 
             print 'Processed train sentence ' + str(j)
             j += 1
@@ -100,7 +127,7 @@ def corpus_processing(train_fname, test_fname):
 
     j = 0
 
-    sentence = []
+    sentence = start_new_sentence(word_list)
     for line in testf:
         if len(line.strip()) > 0:
             line_fields = line.split(' ')
@@ -126,8 +153,15 @@ def corpus_processing(train_fname, test_fname):
             sentence.append(Word(word_array, pos_array, lbl))
 
         else:
+            word_array = np.zeros(len(word_list[0]) + 1)
+            pos_array = np.zeros(len(word_list[1]) + 1)
+            wix = word_list[0].index('</s>')
+            pix = word_list[1].index('</s>')
+            word_array[wix] = 1
+            pos_array[pix] = 1
+            sentence.append(Word(word_array, pos_array, -1))
             test_corpus.append(Sentence(sentence))
-            sentence = []
+            sentence = start_new_sentence(word_list)
 
             print 'Processed test sentence ' + str(j)
             j += 1
