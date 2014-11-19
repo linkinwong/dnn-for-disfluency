@@ -178,6 +178,11 @@ def test_network(test_model, train_set, test_set, log):
     # test model
     print u'Testing model'
 
+    tpw = 0
+    fpw = 0
+    tnw = 0
+    fnw = 0
+
     correct = 0
     mistakes = dict()
     index = 0
@@ -188,6 +193,22 @@ def test_network(test_model, train_set, test_set, log):
         net_out[net_out >= 0.0] = 1
         net_out[net_out < 0.0] = -1
 
+        for w in np.arange(len(net_out)):
+            if w == 0 or w == len(net_out) - 1:  # Sentence boundaries (false words)
+                continue
+
+            if net_out[w] == 1 and golden_label[w] == 1:
+                tpw += 1
+
+            elif net_out[w] == -1 and golden_label[w] == -1:
+                tnw += 1
+
+            elif net_out[w] == 1 and golden_label[w] == -1:
+                fpw += 1
+
+            else:
+                fnw += 1
+
         if np.sum(net_out == golden_label) == len(net_out):
             correct += 1
 
@@ -195,15 +216,31 @@ def test_network(test_model, train_set, test_set, log):
             mistakes[index] = (net_out, golden_label)
         index += 1
 
+    word_accuracy = float(tpw + tnw) / float(tpw + tnw + fpw + fnw)
+    word_precision = float(tpw) / float(tpw + fpw)
+    word_recall = float(tpw) / float(tpw + fnw)
+    word_fscore = 2 * word_precision * word_recall / (word_precision + word_recall)
+    sentence_accuracy = float(correct) / len(test_set)
+
     for m in sorted(mistakes.keys())[:10]:
         print mistakes[m]
-    print u'Test set accuracy: %f' % (float(correct) / len(test_set))
-    log.write(u'Test set accuracy: %f\n' % (float(correct) / len(test_set)))
+
+    print u'Word accuracy: %f' % word_accuracy
+    print u'Word precision: %f' % word_precision
+    print u'Word recall: %f' % word_recall
+    print u'Word F-1: %f' % word_fscore
+    print u'Sentence accuracy: %f' % sentence_accuracy
+
+    log.write(u'Word accuracy: %f\n' % word_accuracy)
+    log.write(u'Word precision: %f\n' % word_precision)
+    log.write(u'Word recall: %f\n' % word_recall)
+    log.write(u'Word F-1: %f\n' % word_fscore)
+    log.write(u'Sentence accuracy: %f\n' % sentence_accuracy)
+
+    return word_fscore, sentence_accuracy
 
 
 def run_network(train_set, test_set, expname):
-    # theano.config.mode = 'DebugMode'
-
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
@@ -248,12 +285,13 @@ def run_network(train_set, test_set, expname):
     # Training
     print u'Training...'
 
-    epochs = 10
+    epochs = 1000
 
     # Epochs
     last_error = 0
     iter_cost = 3e10
     i = 0
+    old_val_result = 0.0, 0.0
     while i < epochs:
         last_error = iter_cost
         iter_cost = 0
@@ -274,13 +312,19 @@ def run_network(train_set, test_set, expname):
         log.write(u'Epoch %d: cost %f\n' % (i, iter_cost))
         i += 1
 
-        test_network(test_model, train_set, validation_set, log)  # Test after every epoch
+        val_result = test_network(test_model, train_set, validation_set, log)  # Test after every epoch
         plotobj.update(1)
 
         if last_error < iter_cost:
             learning_rate /= 2
             train_model = update_learning_rate(learning_rate, network, gradient_param_list, sample, l, cost)
 
+        # Exit condition
+        if last_error > iter_cost and old_val_result[0] > val_result[0] and old_val_result[1] > val_result[
+            1] and i > 20:
+            break
+
+        old_val_result = val_result
 
     # Final test
     test_network(test_model, train_set, test_set, log)
