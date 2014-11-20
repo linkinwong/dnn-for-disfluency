@@ -6,12 +6,9 @@ from corpus_processing import *
 
 
 def main():
-    train_set, test_set = corpus_processing('train.txt', 'test.txt')
+    train_set, development_set, test_set = corpus_processing('train.txt', 'development.txt', 'test.txt')
 
-    run_network(train_set, test_set, 'prova_uno_')
-
-
-    run_network(train_set, test_set, 'prova')
+    run_network(train_set, development_set, test_set, 'prova_uno_')
 
 
 if __name__ == '__main__':

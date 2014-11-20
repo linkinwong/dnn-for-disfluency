@@ -2,6 +2,7 @@ __author__ = 'brtdra'
 
 import numpy as np
 import scipy.sparse as sp
+import re
 
 
 class Word(object):
@@ -48,16 +49,23 @@ def find_all_words(all_lines):
 
     for l in all_lines:
         if len(l.strip()) > 0:
-            fields = l.split(' ')
+            l = re.sub(r'\s+', '\t', l.strip())
+            fields = l.split('\t')
 
-            all_words.add(fields[0])
-            all_pos.add(fields[1])
-            all_labels.add(fields[2])
+            try:
+                all_words.add(fields[0])
+                all_pos.add(fields[1])
+                all_labels.add(fields[3])
+
+            except IndexError:
+                print l
+                print fields
+                exit(1)
 
     return sorted(list(all_words)), sorted(list(all_pos)), sorted(list(all_labels))
 
 
-def corpus_processing(train_fname, test_fname):
+def corpus_processing(train_fname, develop_fname, test_fname):
     def start_new_sentence(word_list):
         sentence = []
         word_array = np.zeros(len(word_list[0]) + 1)
@@ -84,7 +92,8 @@ def corpus_processing(train_fname, test_fname):
     sentence = start_new_sentence(word_list)
     for line in train_lines:
         if len(line.strip()) > 0:
-            line_fields = line.split(' ')
+            line = re.sub(r'\s+', '\t', line.strip())
+            line_fields = line.split('\t')
             word_array = np.zeros(len(word_list[0]) + 1)
             pos_array = np.zeros(len(word_list[1]) + 1)
 
@@ -102,7 +111,7 @@ def corpus_processing(train_fname, test_fname):
             else:
                 pos_array[-1] = 1
 
-            lbl = -1 if line_fields[2].strip() == 'O' else 1
+            lbl = -1 if line_fields[3].strip() == 'OK' else 1
 
             sentence.append(Word(word_array, pos_array, lbl))
 
@@ -121,16 +130,16 @@ def corpus_processing(train_fname, test_fname):
             print 'Processed train sentence ' + str(j)
             j += 1
 
-
-    testf = open(test_fname)
-    test_corpus = []
+    develf = open(develop_fname)
+    devel_corpus = []
 
     j = 0
 
     sentence = start_new_sentence(word_list)
-    for line in testf:
+    for line in develf:
         if len(line.strip()) > 0:
-            line_fields = line.split(' ')
+            line = re.sub(r'\s+', '\t', line.strip())
+            line_fields = line.split('\t')
             word_array = np.zeros(len(word_list[0]) + 1)
             pos_array = np.zeros(len(word_list[1]) + 1)
 
@@ -148,7 +157,55 @@ def corpus_processing(train_fname, test_fname):
             else:
                 pos_array[-1] = 1
 
-            lbl = -1 if line_fields[2].strip() == 'O' else 1
+            lbl = -1 if line_fields[3].strip() == 'OK' else 1
+
+            sentence.append(Word(word_array, pos_array, lbl))
+
+        else:
+            word_array = np.zeros(len(word_list[0]) + 1)
+            pos_array = np.zeros(len(word_list[1]) + 1)
+            wix = word_list[0].index('</s>')
+            pix = word_list[1].index('</s>')
+            word_array[wix] = 1
+            pos_array[pix] = 1
+            sentence.append(Word(word_array, pos_array, -1))
+            devel_corpus.append(Sentence(sentence))
+            sentence = start_new_sentence(word_list)
+
+            print 'Processed development sentence ' + str(j)
+            j += 1
+
+    develf.close()
+
+
+    testf = open(test_fname)
+    test_corpus = []
+
+    j = 0
+
+    sentence = start_new_sentence(word_list)
+    for line in testf:
+        if len(line.strip()) > 0:
+            line = re.sub(r'\s+', '\t', line.strip())
+            line_fields = line.split('\t')
+            word_array = np.zeros(len(word_list[0]) + 1)
+            pos_array = np.zeros(len(word_list[1]) + 1)
+
+            if line_fields[0] in word_list[0]:
+                ix = word_list[0].index(line_fields[0])
+                word_array[ix] = 1
+
+            else:
+                word_array[-1] = 1
+
+            if line_fields[1] in word_list[1]:
+                ix = word_list[1].index(line_fields[1])
+                pos_array[ix] = 1
+
+            else:
+                pos_array[-1] = 1
+
+            lbl = -1 if line_fields[3].strip() == 'OK' else 1
 
             sentence.append(Word(word_array, pos_array, lbl))
 
@@ -169,4 +226,4 @@ def corpus_processing(train_fname, test_fname):
 
     testf.close()
 
-    return train_corpus, test_corpus
+    return train_corpus, devel_corpus, test_corpus

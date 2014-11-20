@@ -187,8 +187,8 @@ def test_network(test_model, train_set, test_set, log):
     mistakes = dict()
     index = 0
     for s in test_set:
-        net_out = test_model(s.getInputArray())
-        golden_label = s.getLabelsArray()
+        net_out = test_model(s.getInputArray())[1:-1]
+        golden_label = s.getLabelsArray()[1:-1]
 
         net_out[net_out >= 0.0] = 1
         net_out[net_out < 0.0] = -1
@@ -216,11 +216,19 @@ def test_network(test_model, train_set, test_set, log):
             mistakes[index] = (net_out, golden_label)
         index += 1
 
-    word_accuracy = float(tpw + tnw) / float(tpw + tnw + fpw + fnw)
-    word_precision = float(tpw) / float(tpw + fpw)
-    word_recall = float(tpw) / float(tpw + fnw)
-    word_fscore = 2 * word_precision * word_recall / (word_precision + word_recall)
-    sentence_accuracy = float(correct) / len(test_set)
+    try:
+        word_accuracy = float(tpw + tnw) / float(tpw + tnw + fpw + fnw)
+        word_precision = float(tpw) / float(tpw + fpw)
+        word_recall = float(tpw) / float(tpw + fnw)
+        word_fscore = 2 * word_precision * word_recall / (word_precision + word_recall)
+        sentence_accuracy = float(correct) / len(test_set)
+
+    except ZeroDivisionError:
+        word_accuracy = 0.0
+        word_precision = 0.0
+        word_recall = 0.0
+        word_fscore = 0.0
+        sentence_accuracy = 0.0
 
     for m in sorted(mistakes.keys())[:10]:
         print mistakes[m]
@@ -235,12 +243,12 @@ def test_network(test_model, train_set, test_set, log):
     log.write(u'Word precision: %f\n' % word_precision)
     log.write(u'Word recall: %f\n' % word_recall)
     log.write(u'Word F-1: %f\n' % word_fscore)
-    log.write(u'Sentence accuracy: %f\n' % sentence_accuracy)
+    log.write(u'Sentence accuracy: %f\n\n' % sentence_accuracy)
 
     return word_fscore, sentence_accuracy
 
 
-def run_network(train_set, test_set, expname):
+def run_network(train_set, development_set, test_set, expname):
     log = open(expname + '.txt', 'w')
     plotobj = AccuracyPlot(expname + '.txt', expname)
     log.write(expname + '\n')
@@ -276,12 +284,6 @@ def run_network(train_set, test_set, expname):
                                   outputs=cost,
                                   updates=updates, allow_input_downcast=True)
 
-    # Validation set building
-    train_set_len = len(train_set)
-    random.shuffle(train_set)
-    validation_set = train_set[:train_set_len / 10]
-    reduced_train_set = train_set[train_set_len / 10:]
-
     # Training
     print u'Training...'
 
@@ -297,7 +299,7 @@ def run_network(train_set, test_set, expname):
         iter_cost = 0
 
         sn = 0
-        for s in reduced_train_set:
+        for s in train_set:
             iter_cost += train_model(s.getInputArray(), s.getLabelsArray())
 
             if sn % 1000 == 0:
@@ -312,7 +314,7 @@ def run_network(train_set, test_set, expname):
         log.write(u'Epoch %d: cost %f\n' % (i, iter_cost))
         i += 1
 
-        val_result = test_network(test_model, train_set, validation_set, log)  # Test after every epoch
+        val_result = test_network(test_model, train_set, development_set, log)  # Test after every epoch
         plotobj.update(1)
 
         if last_error < iter_cost:
