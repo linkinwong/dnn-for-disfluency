@@ -1,4 +1,3 @@
-__author__ = 'brtdra'
 
 from accuracy_plot import *
 
@@ -8,7 +7,10 @@ import theano
 import theano.tensor.nnet as nnet
 import math
 import random
+import logging
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class EmbeddingLayer(object):
     def __init__(self, input, input_size, output_size):

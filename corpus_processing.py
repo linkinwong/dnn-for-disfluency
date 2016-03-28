@@ -1,9 +1,11 @@
-__author__ = 'brtdra'
 
 import numpy as np
 import scipy.sparse as sp
 import re
+import logging
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class Word(object):
     def __init__(self, word, pos, label):
@@ -47,6 +49,8 @@ def find_all_words(all_lines):
     all_words.add('</s>')
     all_pos.add('</s>')
 
+    logger.info("all_words after adding <s>: %s", all_words)
+
     for l in all_lines:
         if len(l.strip()) > 0:
             l = re.sub(r'\s+', '\t', l.strip())
@@ -84,18 +88,26 @@ def corpus_processing(train_fname, develop_fname, test_fname):
     trainf.close()
 
     word_list = find_all_words(train_lines)
+    logger.info("pos set is : %s ", word_list[1] )
 
     train_corpus = []
 
     j = 0
 
     sentence = start_new_sentence(word_list)
+    logger.info("sentence after start new sentence %s", sentence[0].pos.toarray())
+    debug_p = 211
     for line in train_lines:
+        debug_p -= 1
         if len(line.strip()) > 0:
             line = re.sub(r'\s+', '\t', line.strip())
             line_fields = line.split('\t')
+
             word_array = np.zeros(len(word_list[0]) + 1)
             pos_array = np.zeros(len(word_list[1]) + 1)
+            if debug_p == 0:
+                pass
+                #logger.info("word_array %s   " , word_array)
 
             if line_fields[0] in word_list[0]:
                 ix = word_list[0].index(line_fields[0])
@@ -122,8 +134,10 @@ def corpus_processing(train_fname, develop_fname, test_fname):
             pix = word_list[1].index('</s>')
             word_array[wix] = 1
             pos_array[pix] = 1
-            sentence.append(Word(word_array, pos_array, -1))
+            #sentence.append(Word(word_array, pos_array, -1))
             train_corpus.append(Sentence(sentence))
+            #logger.info("the integrate sentence is: %s", Sentence(sentence).getInputArray().tolist() )
+            
             sentence = start_new_sentence(word_list)
 
 
